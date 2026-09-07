@@ -112,16 +112,25 @@ UI is dark-themed only — there is no light mode or toggle.
 
 `render.yaml` at the project root is a Render Blueprint that defines
 both services together — a Python web service for the backend
-(`backend/`) and a Node web service for the frontend (`frontend/`). The
-backend's `FRONTEND_URL` and the frontend's `NEXT_PUBLIC_API_URL` are
-wired to each other automatically via Render's `fromService`, so you
-don't need to hardcode either URL once both services exist.
+(`backend/`) and a Node web service for the frontend (`frontend/`).
 
 In the Render dashboard: **New > Blueprint**, connect this repo, and
 Render will detect `render.yaml` and propose both services. You'll be
-prompted to set `GEMINI_API_KEY` on the backend service — it's marked
-`sync: false` in the Blueprint, meaning it's never committed and must be
-set manually as a secret in the dashboard.
+prompted to set `GEMINI_API_KEY` as a secret on the backend service.
+
+**Two more values must be set by hand, once, after both services
+exist** — `FRONTEND_URL` on the backend and `NEXT_PUBLIC_API_URL` on
+the frontend, each pointing at the *other* service's public URL (e.g.
+`https://artefax.onrender.com` and `https://artefax-backend.onrender.com`).
+These can't be auto-wired: Render's Blueprint `fromService` only
+exposes a service's **private-network** hostname (just its bare
+service name, not a real domain) via `property: host` — there's no
+`fromService` property for a service's actual public `onrender.com`
+URL. Both of these values are used by a real browser (CORS origin
+matching on the backend, the `fetch()` base URL on the frontend), so
+the private-network hostname is useless for either — it has to be the
+public URL, entered manually. Both are marked `sync: false` in the
+Blueprint for this reason.
 
 > **Python version is pinned to 3.12.7** (`PYTHON_VERSION` in
 > `render.yaml`, plus `backend/.python-version` as a second signal).

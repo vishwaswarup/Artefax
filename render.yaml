@@ -19,10 +19,15 @@ services:
       - key: MODEL_NAME
         value: gemini-flash-lite-latest
       - key: FRONTEND_URL
-        fromService:
-          type: web
-          name: artefax
-          property: host
+        sync: false # set manually — see note below
+        # fromService's only URL-shaped property is "host", which
+        # resolves to the service's PRIVATE-network hostname (just the
+        # bare service name, e.g. "artefax") — not the public
+        # onrender.com URL. That's useless here: CORS matches against
+        # the real public Origin a browser sends, and Render doesn't
+        # expose the public URL as a fromService property at all. So
+        # this has to be set by hand once the frontend service exists:
+        # https://artefax.onrender.com (or your custom domain, if any).
 
   # Next.js frontend
   - type: web
@@ -34,7 +39,5 @@ services:
     startCommand: npm run start
     envVars:
       - key: NEXT_PUBLIC_API_URL
-        fromService:
-          type: web
-          name: artefax-backend
-          property: host
+        sync: false # set manually — same reason as FRONTEND_URL above:
+        # https://artefax-backend.onrender.com (or your custom domain)

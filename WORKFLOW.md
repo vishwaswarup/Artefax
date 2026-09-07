@@ -77,6 +77,82 @@ and zero failed/flagged artifacts on the demo document.
 
 Newest first. Each entry: what was decided, why, and what it touched.
 
+### 2026-09-07 — Corrected a real design mistake: fromService can't give a public URL
+- **Trigger:** User reported "Failed to fetch" on the live
+  `artefax.onrender.com` frontend. This took a real debugging session to
+  root-cause, not a quick fix — worth recording the trail since the
+  eventual finding overturns a design decision from the original Render
+  deployment task.
+- **Debugging trail (roughly in order):**
+  1. Probed both live URLs directly with `curl`. Backend healthy (200 on
+     `/api/health`), frontend live (200, real HTML) — so at first glance
+     "both services are up" looked like it should have been fine.
+  2. Tested an actual CORS preflight (`OPTIONS` with `Origin: https://
+     artefax.onrender.com`) against the backend directly — got back
+     `400 Disallowed CORS origin`, even though `Origin: http://
+     localhost:3000` on the same backend correctly returned `200` with a
+     matching `access-control-allow-origin`. This proved the CORS
+     middleware itself was working correctly; the *value* it was
+     comparing against was wrong.
+  3. Hypothesized the backend's `FRONTEND_URL` env var hadn't been
+     re-resolved since the frontend service was renamed. Fetched
+     Render's own Blueprint docs to confirm rather than guess: `fromService`
+     env vars **only update on a Blueprint sync**, not on a plain Manual
+     Deploy of the referencing service — confirmed this was at least
+     part of the problem and had the user trigger a Blueprint-level sync
+     instead of a per-service Manual Deploy.
+  4. Still failing afterward. Repeated `curl` health checks came back
+     flapping — some real FastAPI 200/404 responses, some Render-edge
+     `x-render-routing: no-server` responses for the exact same URL
+     seconds apart, despite the dashboard showing the service as "Live."
+     Had the user paste the actual Render service logs rather than
+     continuing to guess from the outside: logs showed a single stable
+     `uvicorn` process, zero restarts, every internal health probe
+     succeeding — meaning the app itself was completely healthy and the
+     "no-server" blips were noise from hitting Render's edge repeatedly
+     in a tight automated loop, not a real backend problem. Important
+     lesson embedded here: **don't keep guessing from outside signals
+     (curl) once they start contradicting each other — go straight to
+     the actual server logs.**
+  5. With the "is the app even running" question closed, re-focused on
+     the one signal that had been consistent throughout: CORS was still
+     being rejected. Had the user check the *actual value* of
+     `FRONTEND_URL` in the Render dashboard's Environment tab —
+     it was the literal string `"artefax"` (the bare service name).
+  6. That was the real finding: fetched Render's Blueprint spec docs
+     specifically for the `fromService.property` field and confirmed
+     `property: host` resolves to **the service's private-network
+     hostname** (literally just its short service name) — Render does
+     **not** expose a service's public `onrender.com` URL as a
+     `fromService` property at all. There is no property that gives what
+     the original design needed.
+- **Why this broke both directions, not just CORS:** the frontend's
+  `NEXT_PUBLIC_API_URL` was wired the exact same (wrong) way, so it was
+  almost certainly also just the bare string `"artefax-backend"` — not
+  even a syntactically valid URL once the `https://` normalization logic
+  ran on it (`https://artefax-backend`, no `.onrender.com`, unreachable).
+  That, not the CORS rejection, was likely the actual proximate cause of
+  the browser-visible "Failed to fetch" — the CORS misconfiguration was
+  real but the request may never have gotten far enough to hit it.
+- **Fix: stopped trying to auto-wire these two values and made that
+  explicit** rather than fighting the platform. Both `FRONTEND_URL`
+  (backend) and `NEXT_PUBLIC_API_URL` (frontend) are now `sync: false`
+  in `render.yaml`, with a comment explaining exactly why `fromService`
+  can't do this job, and must be entered manually in the Render
+  dashboard as the real public URLs
+  (`https://artefax.onrender.com` / `https://artefax-backend.onrender.com`)
+  once both services exist. This is a one-time manual step, not a
+  recurring one — it doesn't need to be redone on future deploys unless
+  a service is renamed again.
+- **Files touched:** `render.yaml` (both `fromService` blocks replaced
+  with `sync: false` + explanatory comments), `README.md` ("Deploying to
+  Render" section rewritten to drop the incorrect "wired automatically"
+  claim and explain the manual step and why it's necessary).
+- **Not yet confirmed fixed end-to-end** — the user still needs to enter
+  both values manually in the Render dashboard and redeploy; the next
+  step is re-testing the actual upload flow on the live site once that's
+  done.
+
 ### 2026-09-07 — Renamed the Render frontend service to get a clean URL
 - **Trigger:** User deleted the `artefax-frontend` service from the
   Render dashboard (its URL was the clunky

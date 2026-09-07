@@ -21,12 +21,12 @@ services:
       - key: FRONTEND_URL
         fromService:
           type: web
-          name: artefax-frontend
+          name: artefax
           property: host
 
   # Next.js frontend
   - type: web
-    name: artefax-frontend
+    name: artefax
     env: node
     plan: free
     rootDir: frontend

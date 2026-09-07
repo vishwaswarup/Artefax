@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Artifact,
   DocumentSummary,
@@ -400,6 +400,21 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
       ? "text-amber-300 bg-amber-950 border-amber-800"
       : "text-red-300 bg-red-950 border-red-800";
 
+  const [expanded, setExpanded] = useState(false);
+  const [isTruncated, setIsTruncated] = useState(false);
+  const previewRef = useRef<HTMLParagraphElement>(null);
+
+  // Detect whether the clamped preview is actually cutting content off —
+  // only show the expand control when it is. Re-measured whenever the
+  // card is collapsed (expanding removes the clamp, so there's nothing
+  // to measure then).
+  useEffect(() => {
+    if (expanded) return;
+    const el = previewRef.current;
+    if (!el) return;
+    setIsTruncated(el.scrollHeight > el.clientHeight + 1);
+  }, [preview, expanded]);
+
   return (
     <div className="border border-neutral-800 rounded-lg p-4 flex flex-col gap-3 transition-colors hover:border-neutral-700">
       <div className="flex items-center justify-between">
@@ -412,13 +427,29 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
       </div>
 
       {artifact.status !== "failed" ? (
-        <p className="text-sm text-neutral-300 whitespace-pre-line line-clamp-6">
-          {preview}
-        </p>
+        expanded ? (
+          <FullArtifactContent artifact={artifact} />
+        ) : (
+          <p
+            ref={previewRef}
+            className="text-sm text-neutral-300 whitespace-pre-line line-clamp-6"
+          >
+            {preview}
+          </p>
+        )
       ) : (
         <p className="text-sm text-red-400">
           {artifact.validation_notes.join(" ") || "Generation failed."}
         </p>
+      )}
+
+      {artifact.status !== "failed" && (isTruncated || expanded) && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="cursor-pointer self-start text-xs font-medium text-neutral-400 hover:text-neutral-100 underline underline-offset-2"
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
       )}
 
       {artifact.validation_notes.length > 0 && artifact.status === "flagged" && (
@@ -442,6 +473,120 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
       )}
     </div>
   );
+}
+
+function BulletList({ items }: { items: string[] }) {
+  if (items.length === 0) return null;
+  return (
+    <ul className="list-disc list-inside space-y-1">
+      {items.map((item, i) => (
+        <li key={i}>{item}</li>
+      ))}
+    </ul>
+  );
+}
+
+// Full, structured view of a generated artifact's content — one layout
+// per output type, so Advisory/Executive Summary show real bullet
+// lists and Presentation shows a proper slide-by-slide breakdown,
+// rather than everything collapsing into one flat block of text.
+function FullArtifactContent({ artifact }: { artifact: Artifact }) {
+  const c = artifact.content as Record<string, unknown>;
+  const textClass = "text-sm text-neutral-300";
+
+  switch (artifact.output_type) {
+    case "executive_summary": {
+      const keyFindings = (c.key_findings as string[]) || [];
+      const recommendations = (c.recommendations as string[]) || [];
+      return (
+        <div className={`flex flex-col gap-3 ${textClass}`}>
+          <p className="font-semibold text-neutral-50">{c.headline as string}</p>
+          <p className="whitespace-pre-line">{c.overview as string}</p>
+          {keyFindings.length > 0 && (
+            <div>
+              <p className="font-medium text-neutral-200 mb-1">Key findings</p>
+              <BulletList items={keyFindings} />
+            </div>
+          )}
+          {recommendations.length > 0 && (
+            <div>
+              <p className="font-medium text-neutral-200 mb-1">Recommendations</p>
+              <BulletList items={recommendations} />
+            </div>
+          )}
+        </div>
+      );
+    }
+    case "linkedin_post": {
+      const hashtags = (c.hashtags as string[]) || [];
+      return (
+        <div className={`flex flex-col gap-3 ${textClass}`}>
+          <p className="font-semibold text-neutral-50">{c.hook as string}</p>
+          <p className="whitespace-pre-line">{c.body as string}</p>
+          {hashtags.length > 0 && (
+            <p className="text-neutral-400">{hashtags.map((h) => `#${h}`).join(" ")}</p>
+          )}
+        </div>
+      );
+    }
+    case "advisory": {
+      const affectedParties = (c.affected_parties as string[]) || [];
+      const recommendedActions = (c.recommended_actions as string[]) || [];
+      return (
+        <div className={`flex flex-col gap-3 ${textClass}`}>
+          <p className="font-semibold text-neutral-50">
+            {c.title as string}{" "}
+            <span className="text-xs font-medium uppercase tracking-wide text-neutral-400">
+              [{c.severity as string}]
+            </span>
+          </p>
+          <p className="whitespace-pre-line">{c.summary as string}</p>
+          {affectedParties.length > 0 && (
+            <div>
+              <p className="font-medium text-neutral-200 mb-1">Affected parties</p>
+              <BulletList items={affectedParties} />
+            </div>
+          )}
+          {recommendedActions.length > 0 && (
+            <div>
+              <p className="font-medium text-neutral-200 mb-1">Recommended actions</p>
+              <BulletList items={recommendedActions} />
+            </div>
+          )}
+        </div>
+      );
+    }
+    case "presentation": {
+      const slides =
+        (c.slides as { slide_title: string; bullet_points: string[]; speaker_notes: string }[]) ||
+        [];
+      return (
+        <div className={`flex flex-col gap-4 ${textClass}`}>
+          <p className="font-semibold text-neutral-50">{c.title as string}</p>
+          {slides.map((slide, i) => (
+            <div
+              key={i}
+              className={i > 0 ? "border-t border-neutral-800 pt-3" : undefined}
+            >
+              <p className="font-medium text-neutral-200">
+                Slide {i + 1}: {slide.slide_title}
+              </p>
+              <div className="mt-1">
+                <BulletList items={slide.bullet_points || []} />
+              </div>
+              {slide.speaker_notes && (
+                <p className="text-xs text-neutral-500 italic mt-2">
+                  Speaker notes: {slide.speaker_notes}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      );
+    }
+    default:
+      return null;
+  }
 }
 
 function summarizeContent(artifact: Artifact): string {

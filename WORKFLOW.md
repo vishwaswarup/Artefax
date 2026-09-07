@@ -77,6 +77,48 @@ and zero failed/flagged artifacts on the demo document.
 
 Newest first. Each entry: what was decided, why, and what it touched.
 
+### 2026-09-07 — Render build failure: pinned Python version
+- **Trigger:** First real Render deploy attempt failed at the backend
+  build step. Log showed Render defaulting to **Python 3.14.3**, then
+  `pip install -r requirements.txt` failing on `pydantic-core==2.27.2`:
+  no prebuilt wheel for 3.14 yet, so pip fell back to compiling it from
+  source via Rust/maturin, which then failed because Render's build
+  filesystem is read-only for the cargo registry cache
+  (`Read-only file system (os error 30)`). **This is the same class of
+  bug as the very first local setup issue in this project** (see the
+  2026-09-07 "Python venv architecture issues" entry near the bottom of
+  this log) — different platform, same root cause: a Python version too
+  new for `pydantic-core` to have a prebuilt wheel yet.
+- **Confirmed the exact fix mechanism from Render's own docs before
+  guessing** (fetched `render.com/docs/troubleshooting-deploys`, which
+  pointed to `render.com/docs/language-support`): Render supports
+  pinning via a `PYTHON_VERSION` env var **or** a `.python-version`
+  file. Did both, redundantly:
+  - Added `PYTHON_VERSION: 3.12.7` to the backend service's `envVars` in
+    `render.yaml` (centralizes it with the rest of the Blueprint config).
+  - Added `backend/.python-version` containing `3.12.7` as a second
+    signal (also incidentally helps anyone using `pyenv` locally, though
+    this project's local venv setup doesn't depend on it).
+  - `3.12.7` chosen specifically because `pydantic-core==2.27.2` has a
+    prebuilt wheel for it (unlike 3.14) — matches the same reasoning
+    that led to using Python 3.13 for the local macOS venv originally.
+- **Also flagged to the user, unrelated to this fix but noticed in the
+  same turn:** their real `GEMINI_API_KEY` value appeared in the
+  conversation transcript via an IDE file-selection of `backend/.env`.
+  The file itself was never committed (`.env` is gitignored, only
+  `.env.example` is tracked), but the raw key was now sitting in chat
+  history — recommended rotating it in AI Studio as a precaution.
+- **Files touched:** `render.yaml` (`PYTHON_VERSION` env var),
+  `backend/.python-version` (new), `README.md` (new note in the
+  "Deploying to Render" section explaining the fix, cross-referenced to
+  the existing Apple Silicon note since they're the same class of bug).
+- **Not yet re-verified against an actual Render deploy** — this fix is
+  based on Render's documented mechanism and the same root-cause
+  reasoning that resolved the local equivalent, but the next Render
+  build attempt should be watched to confirm it actually clears this
+  step (and doesn't surface a similar issue with the frontend's Node
+  build, which hasn't been exercised on Render yet either).
+
 ### 2026-09-07 — Render deployment: Blueprint (render.yaml) for both services
 - **Trigger:** User wants both services deployable from one repo via a
   single Render Blueprint, with CORS/env-var wiring handled automatically

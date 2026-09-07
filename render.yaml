@@ -9,6 +9,11 @@ services:
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7 # Render defaults to 3.14, which has no prebuilt
+        # pydantic-core wheel yet — pip then tries to compile it from
+        # source (Rust/maturin), which fails on Render's read-only build
+        # filesystem. Pin to a version with a prebuilt wheel instead.
       - key: GEMINI_API_KEY
         sync: false # secret — set manually in the Render dashboard
       - key: MODEL_NAME

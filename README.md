@@ -123,6 +123,15 @@ prompted to set `GEMINI_API_KEY` on the backend service — it's marked
 `sync: false` in the Blueprint, meaning it's never committed and must be
 set manually as a secret in the dashboard.
 
+> **Python version is pinned to 3.12.7** (`PYTHON_VERSION` in
+> `render.yaml`, plus `backend/.python-version` as a second signal).
+> Render currently defaults to Python 3.14, which has no prebuilt
+> `pydantic-core` wheel yet — pip falls back to compiling it from source
+> via Rust/maturin, which fails on Render's read-only build filesystem.
+> The same class of issue as the Apple Silicon note above, different
+> cause. If a future dependency bump needs a newer Python, bump the
+> pinned version in both places together.
+
 > **Data does not persist across deploys or restarts.** The backend
 > stores its SQLite database (`backend/app.db`) and uploaded/generated
 > files (`backend/storage/`) on local disk, which works fine for local

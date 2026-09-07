@@ -77,6 +77,40 @@ and zero failed/flagged artifacts on the demo document.
 
 Newest first. Each entry: what was decided, why, and what it touched.
 
+### 2026-09-07 — Renamed the Render frontend service to get a clean URL
+- **Trigger:** User deleted the `artefax-frontend` service from the
+  Render dashboard (its URL was the clunky
+  `artefax-frontend.onrender.com`) and wants it recreated via a fresh
+  Blueprint deploy under the plain name `artefax`, giving
+  `https://artefax.onrender.com` from the start.
+- **`render.yaml` change:** frontend service's `name: artefax-frontend`
+  → `name: artefax`. The backend's `FRONTEND_URL` env var references the
+  frontend by name via `fromService.name` — that reference was updated
+  to `artefax` too, or the backend would have kept pointing at a
+  now-nonexistent service name and CORS would silently never match the
+  new URL. **Backend service name (`artefax-backend`) left untouched**,
+  exactly as asked.
+- **Searched the whole repo for hardcoded references** to
+  `artefax-frontend.onrender.com` (code, README, docs, config) — found
+  none outside `WORKFLOW.md`'s own historical decision-log entries
+  (which describe what was true when they were written, e.g. the
+  earlier CORS-verification entry that literally tested against
+  `artefax-frontend.onrender.com` as it existed then). Left those
+  historical entries as accurate history rather than rewriting them —
+  this entry is the correction going forward, per this file's own
+  stated convention of a dated log, not a living-document rewrite.
+- **Confirmed CORS was never hardcoded** — `backend/app/main.py` reads
+  the allowed frontend origin entirely from the `FRONTEND_URL` env var
+  (`backend/app/config.py`), which `render.yaml`'s `fromService` now
+  points at the renamed service. No hardcoded URL existed anywhere in
+  application code to begin with (built that way from the start — see
+  the original Render deployment entry below), so no additional fix was
+  needed there beyond the `fromService.name` update above.
+- **Files touched:** `render.yaml` only.
+- **Still needs a fresh Blueprint deploy** to actually create the
+  renamed service and pick up the pinned Python version fix from the
+  entry below — this rename alone doesn't trigger a deploy by itself.
+
 ### 2026-09-07 — Render build failure: pinned Python version
 - **Trigger:** First real Render deploy attempt failed at the backend
   build step. Log showed Render defaulting to **Python 3.14.3**, then

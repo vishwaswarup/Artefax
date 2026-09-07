@@ -1,0 +1,35 @@
+services:
+  # FastAPI backend
+  - type: web
+    name: artefax-backend
+    env: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false # secret — set manually in the Render dashboard
+      - key: MODEL_NAME
+        value: gemini-flash-lite-latest
+      - key: FRONTEND_URL
+        fromService:
+          type: web
+          name: artefax-frontend
+          property: host
+
+  # Next.js frontend
+  - type: web
+    name: artefax-frontend
+    env: node
+    plan: free
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          type: web
+          name: artefax-backend
+          property: host

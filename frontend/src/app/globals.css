@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+/* This app is dark-mode only — there is no light theme and no toggle.
+   Colors are fixed Tailwind classes on each element (see page.tsx /
+   app/page.tsx), not CSS variables or a conditional dark: variant.
+   The one exception is --accent below, which exists specifically so
+   it can be swapped in one place while comparing candidate shades. */
+
+:root {
+  /* Accent color candidates — swap the value below to compare:
+     A) #4A6CF7  (cooler, more saturated blue)
+     B) #5B7FFF  (lighter, softer blue)
+     C) #3454D1  (deeper, more muted navy-blue)
+  */
+  --accent: #3454D1; /* currently using option C */
+}
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-accent: var(--accent);
+}
+
+body {
+  font-family: Arial, Helvetica, sans-serif;
+}
